@@ -190,6 +190,10 @@ func (s *Server) checkAuthForMcpProxyAccess() gin.HandlerFunc {
 		// inject the authenticated MCP client in context for the proxy to use
 		ctx = context.WithValue(c.Request.Context(), "client", client)
 
+		// Inject tool group service for tool-level ACL checking
+		// The tool group service implements both ToolGroupToolChecker and ToolGroupResolver interfaces
+		ctx = context.WithValue(ctx, "toolGroupChecker", s.toolGroupService)
+
 		// Set audit context for tracking operations by MCP clients
 		auditCtx := &util.AuditContext{
 			ActorType: model.AuditActorMcpClient,

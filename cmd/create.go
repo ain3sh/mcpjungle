@@ -59,6 +59,7 @@ var createToolGroupCmd = &cobra.Command{
 
 var (
 	createMcpClientCmdAllowedServers string
+	createMcpClientCmdAllowedGroups  string
 	createMcpClientCmdDescription    string
 
 	createToolGroupConfigFilePath string
@@ -71,6 +72,13 @@ func init() {
 		"",
 		"Comma-separated list of MCP servers that this client is allowed to access.\n"+
 			"By default, the list is empty, meaning the client cannot access any MCP servers.",
+	)
+	createMcpClientCmd.Flags().StringVar(
+		&createMcpClientCmdAllowedGroups,
+		"allowed-groups",
+		"",
+		"Comma-separated list of tool groups that this client can access (fine-grained ACL).\n"+
+			"If specified, tool access is determined by group membership; otherwise, falls back to server-level ACL.",
 	)
 	createMcpClientCmd.Flags().StringVar(
 		&createMcpClientCmdDescription,
@@ -105,10 +113,20 @@ func runCreateMcpClient(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// convert the comma-separated list of allowed groups into a slice
+	allowedGroups := make([]string, 0)
+	for _, s := range strings.Split(createMcpClientCmdAllowedGroups, ",") {
+		trimmed := strings.TrimSpace(s)
+		if trimmed != "" {
+			allowedGroups = append(allowedGroups, trimmed)
+		}
+	}
+
 	c := &types.McpClient{
-		Name:        args[0],
-		Description: createMcpClientCmdDescription,
-		AllowList:   allowList,
+		Name:              args[0],
+		Description:       createMcpClientCmdDescription,
+		AllowList:         allowList,
+		AllowedToolGroups: allowedGroups,
 	}
 
 	token, err := apiClient.CreateMcpClient(c)
@@ -121,10 +139,12 @@ func runCreateMcpClient(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("MCP client '%s' created successfully!\n", c.Name)
 
-	if len(c.AllowList) > 0 {
+	if len(c.AllowedToolGroups) > 0 {
+		fmt.Println("Tool groups accessible: " + strings.Join(c.AllowedToolGroups, ","))
+	} else if len(c.AllowList) > 0 {
 		fmt.Println("Servers accessible: " + strings.Join(c.AllowList, ","))
 	} else {
-		fmt.Println("This client does not have access to any MCP servers.")
+		fmt.Println("This client does not have access to any MCP servers or tool groups.")
 	}
 
 	fmt.Printf("\nAccess token: %s\n", token)
