@@ -577,6 +577,42 @@ You can also watch a [Video on using Tool Groups](https://youtu.be/A21rfGgo38A).
 #### Limitation 🚧
 [Prompts](https://modelcontextprotocol.io/specification/2025-06-18/server/prompts) are currently not supported in Tool Groups. We're working to fix this [issue](https://github.com/mcpjungle/MCPJungle/issues/136) 🛠️
 
+## Tool Search
+
+MCPJungle provides a way to discover tools by name/description keywords.
+
+- HTTP API (for humans/automation):
+  - Endpoint: `GET /api/v0/tools/search`
+  - Query params:
+    - `q` (required): search query
+    - `max_results` (optional, 1–100; default 20)
+    - `server` (optional, repeatable): filter by server name (e.g., `&server=context7&server=filesystem`)
+    - `only_enabled` (optional boolean): return only enabled tools
+
+  Example:
+  ```bash
+  curl "http://127.0.0.1:8080/api/v0/tools/search?q=docs&only_enabled=true"
+  ```
+
+- MCP Meta‑tool (for MCP clients over /mcp):
+  - Tool name: `mcpjungle__search_tools`
+  - Inputs:
+    - `query` (string, required)
+    - `max_results` (integer, optional)
+    - `server_names` (array[string], optional)
+    - `only_enabled` (boolean, optional)
+
+  Notes:
+  - This is an MCP tool exposed via the MCP proxy endpoint (`/mcp`).
+  - It is not invokable via the REST endpoint `/api/v0/tools/invoke` (which forwards to DB‑backed tools). Use an MCP client (e.g., Claude, Cursor, or `npx mcp-remote`) to call it.
+
+  Example with `mcp-remote`:
+  ```bash
+  npx -y mcp-remote http://127.0.0.1:8080/mcp --allow-http \
+    --tool mcpjungle__search_tools \
+    --args '{"query":"docs","max_results":5,"only_enabled":true}'
+  ```
+
 ### Managing tool groups
 You can currently perform operations like listing all groups, viewing details of a specific group and deleting a group.
 

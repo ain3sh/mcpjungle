@@ -234,6 +234,7 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 		userAPI.GET("/servers", s.listServersHandler())
 
 		userAPI.GET("/tools", s.listToolsHandler())
+		userAPI.GET("/tools/search", s.searchToolsHandler())
 		userAPI.POST("/tools/invoke", s.invokeToolHandler())
 		userAPI.GET("/tool", s.getToolHandler())
 
