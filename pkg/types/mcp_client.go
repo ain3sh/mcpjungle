@@ -8,4 +8,9 @@ type McpClient struct {
 
 	// AllowList is a list of MCP Servers that this client is allowed to access from MCPJungle.
 	AllowList []string `json:"allow_list"`
+
+	// AllowedToolGroups is a list of tool group names that this client can access.
+	// This provides fine-grained tool-level access control.
+	// If specified, tool access is determined by group membership; otherwise, falls back to server-level ACL.
+	AllowedToolGroups []string `json:"allowed_tool_groups,omitempty"`
 }

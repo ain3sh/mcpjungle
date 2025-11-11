@@ -48,13 +48,22 @@ func (m *McpClientService) CreateClient(client model.McpClient) (*model.McpClien
 		client.AllowList = []byte("[]")
 	}
 
+	// Initialize AllowedToolGroups with empty array if not provided
+	if client.AllowedToolGroups == nil {
+		client.AllowedToolGroups = []byte("[]")
+	}
+
 	if err := m.db.Create(&client).Error; err != nil {
 		return nil, err
 	}
 
+	// Get allowed groups for audit log
+	allowedGroups, _ := client.GetAllowedToolGroups()
+
 	// Log client creation
 	m.auditService.LogCreate(context.Background(), model.AuditEntityMcpClient, client.Name, client.Name, map[string]interface{}{
-		"description": client.Description,
+		"description":         client.Description,
+		"allowed_tool_groups": allowedGroups,
 	})
 
 	return &client, nil

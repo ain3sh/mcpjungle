@@ -26,13 +26,38 @@ func (m *MCPService) MCPProxyToolCallHandler(ctx context.Context, request mcp.Ca
 
 	serverMode := ctx.Value("mode").(model.ServerMode)
 	if model.IsEnterpriseMode(serverMode) {
-		// In enterprise mode, we need to check whether the MCP client is authorized to access the MCP server.
-		// If not, return error Unauthorized.
+		// In enterprise mode, we need to check whether the MCP client is authorized to access the tool.
+		// First check tool-level ACL (via tool groups), then fall back to server-level ACL.
 		c := ctx.Value("client").(*model.McpClient)
-		if !c.CheckHasServerAccess(serverName) {
-			return nil, fmt.Errorf(
-				"client %s is not authorized to access MCP server %s", c.Name, serverName,
-			)
+		
+		// Get the tool group checker if available from context
+		var checker model.ToolGroupToolChecker
+		var resolver model.ToolGroupResolver
+		if tgChecker := ctx.Value("toolGroupChecker"); tgChecker != nil {
+			checker = tgChecker.(model.ToolGroupToolChecker)
+			resolver = tgChecker.(model.ToolGroupResolver)
+		}
+		
+		// Check tool access (uses tool groups if available, otherwise server-level ACL)
+		if checker != nil && resolver != nil {
+			hasAccess, err := c.CheckHasToolAccess(name, checker, resolver)
+			if err != nil {
+				return nil, fmt.Errorf(
+					"failed to check tool access for client %s: %w", c.Name, err,
+				)
+			}
+			if !hasAccess {
+				return nil, fmt.Errorf(
+					"client %s is not authorized to access tool %s", c.Name, name,
+				)
+			}
+		} else {
+			// Fallback to server-level check if tool group service is not available
+			if !c.CheckHasServerAccess(serverName) {
+				return nil, fmt.Errorf(
+					"client %s is not authorized to access MCP server %s", c.Name, serverName,
+				)
+			}
 		}
 	}
 
