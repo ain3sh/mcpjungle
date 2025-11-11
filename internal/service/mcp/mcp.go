@@ -7,6 +7,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+	"github.com/mcpjungle/mcpjungle/internal/service/audit"
 	"github.com/mcpjungle/mcpjungle/internal/telemetry"
 	"gorm.io/gorm"
 )
@@ -37,6 +38,9 @@ type MCPService struct {
 	// (registered or (re)enabled) in mcpjungle.
 	promptAdditionCallback PromptAdditionCallback
 
+	// auditService handles audit trail logging for operations
+	auditService *audit.AuditService
+
 	metrics telemetry.CustomMetrics
 }
 
@@ -63,6 +67,8 @@ func NewMCPService(
 
 		promptDeletionCallback: func(promptNames ...string) {},
 		promptAdditionCallback: func(promptName string) error { return nil },
+
+		auditService: audit.NewAuditService(db),
 
 		metrics: metrics,
 	}

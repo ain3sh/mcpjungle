@@ -217,6 +217,7 @@ func SetupTestDB(t *testing.T) *TestDBSetup {
 		&model.ServerConfig{},
 		&model.ToolGroup{},
 		&model.Prompt{},
+		&model.AuditLog{},
 	)
 	AssertNoError(t, err)
 

@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/mcpjungle/mcpjungle/internal/model"
+	"github.com/mcpjungle/mcpjungle/internal/util"
 	"github.com/mcpjungle/mcpjungle/pkg/types"
 )
 
@@ -61,6 +62,17 @@ func (s *Server) verifyUserAuthForAPIAccess() gin.HandlerFunc {
 
 		// Store user in context for potential role checks in subsequent handlers
 		c.Set("user", authenticatedUser)
+
+		// Set audit context for tracking operations
+		auditCtx := &util.AuditContext{
+			ActorType: model.AuditActorUser,
+			ActorID:   authenticatedUser.Username,
+			IPAddress: c.ClientIP(),
+			UserAgent: c.GetHeader("User-Agent"),
+		}
+		ctx := util.SetAuditContext(c.Request.Context(), auditCtx)
+		c.Request = c.Request.WithContext(ctx)
+
 		c.Next()
 	}
 }
@@ -177,6 +189,15 @@ func (s *Server) checkAuthForMcpProxyAccess() gin.HandlerFunc {
 
 		// inject the authenticated MCP client in context for the proxy to use
 		ctx = context.WithValue(c.Request.Context(), "client", client)
+
+		// Set audit context for tracking operations by MCP clients
+		auditCtx := &util.AuditContext{
+			ActorType: model.AuditActorMcpClient,
+			ActorID:   client.Name,
+			IPAddress: c.ClientIP(),
+			UserAgent: c.GetHeader("User-Agent"),
+		}
+		ctx = util.SetAuditContext(ctx, auditCtx)
 		c.Request = c.Request.WithContext(ctx)
 
 		c.Next()

@@ -2,6 +2,7 @@
 package toolgroup
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"regexp"
@@ -10,6 +11,7 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/mcpjungle/mcpjungle/internal/model"
+	"github.com/mcpjungle/mcpjungle/internal/service/audit"
 	"github.com/mcpjungle/mcpjungle/internal/service/mcp"
 	"github.com/mcpjungle/mcpjungle/pkg/types"
 	"github.com/mcpjungle/mcpjungle/pkg/util"
@@ -28,7 +30,8 @@ var ValidGroupName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
 type ToolGroupService struct {
 	db *gorm.DB
 
-	mcpService *mcp.MCPService
+	mcpService   *mcp.MCPService
+	auditService *audit.AuditService
 
 	// mcpServers manages the MCP proxy servers for all the tool groups
 	// key: tool group name, value: MCP proxy server
@@ -45,8 +48,9 @@ type ToolGroupService struct {
 
 func NewToolGroupService(db *gorm.DB, mcpService *mcp.MCPService) (*ToolGroupService, error) {
 	s := &ToolGroupService{
-		db:         db,
-		mcpService: mcpService,
+		db:           db,
+		mcpService:   mcpService,
+		auditService: audit.NewAuditService(db),
 
 		mcpServers:   make(map[string]*server.MCPServer),
 		mcpServersMu: sync.RWMutex{},
@@ -150,6 +154,14 @@ func (s *ToolGroupService) CreateToolGroup(group *model.ToolGroup) error {
 	// finally, add the proxy MCPs to the tool group MCPs manager so that it is ready to serve
 	s.addToolGroupMCPServer(group.Name, mcpServer)
 	s.addToolGroupSseMCPServer(group.Name, sseMcpServer)
+
+	// Log tool group creation
+	s.auditService.LogCreate(context.Background(), model.AuditEntityToolGroup, group.Name, group.Name, map[string]interface{}{
+		"description":      group.Description,
+		"tools_count":      len(toolNames),
+		"prompts_count":    len(promptNames),
+		"included_servers": group.IncludedServers,
+	})
 
 	return nil
 }
@@ -305,6 +317,28 @@ func (s *ToolGroupService) UpdateToolGroup(name string, updatedGroup *model.Tool
 		return nil, fmt.Errorf("failed to update tool group in DB: %w", err)
 	}
 
+	// Log tool group update with detailed changes
+	changes := make(map[string]interface{})
+	if updatedGroup.Description != oldGroup.Description {
+		changes["description_changed"] = map[string]string{
+			"from": oldGroup.Description,
+			"to":   updatedGroup.Description,
+		}
+	}
+	if len(toolsAdded) > 0 {
+		changes["tools_added"] = toolsAdded
+	}
+	if len(toolsRemoved) > 0 {
+		changes["tools_removed"] = toolsRemoved
+	}
+	if len(promptsAdded) > 0 {
+		changes["prompts_added"] = promptsAdded
+	}
+	if len(promptsRemoved) > 0 {
+		changes["prompts_removed"] = promptsRemoved
+	}
+	s.auditService.LogUpdate(context.Background(), model.AuditEntityToolGroup, name, name, changes)
+
 	return oldGroup, nil
 }
 
@@ -336,6 +370,10 @@ func (s *ToolGroupService) DeleteToolGroup(name string) error {
 	if err != nil {
 		return fmt.Errorf("failed to delete toolgroup: %w", err)
 	}
+
+	// Log tool group deletion
+	s.auditService.LogDelete(context.Background(), model.AuditEntityToolGroup, name, name)
+
 	return nil
 }
 
