@@ -8,6 +8,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/mcpjungle/mcpjungle/internal/service/audit"
+	"github.com/mcpjungle/mcpjungle/internal/service/search"
 	"github.com/mcpjungle/mcpjungle/internal/telemetry"
 	"gorm.io/gorm"
 )
@@ -41,6 +42,9 @@ type MCPService struct {
 	// auditService handles audit trail logging for operations
 	auditService *audit.AuditService
 
+	// searchService provides tool search functionality
+	searchService *search.SearchService
+
 	metrics telemetry.CustomMetrics
 }
 
@@ -70,10 +74,17 @@ func NewMCPService(
 
 		auditService: audit.NewAuditService(db),
 
+		searchService: search.NewSearchService(db),
+
 		metrics: metrics,
 	}
 	if err := s.initMCPProxyServer(); err != nil {
 		return nil, fmt.Errorf("failed to initialize MCP proxy server: %w", err)
 	}
 	return s, nil
+}
+
+// GetSearchService returns the search service instance
+func (m *MCPService) GetSearchService() *search.SearchService {
+	return m.searchService
 }

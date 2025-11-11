@@ -161,6 +161,11 @@ func (m *MCPService) mcpProxyPromptHandler(ctx context.Context, request mcp.GetP
 // initMCPProxyServer initializes the MCP proxy server.
 // It loads all the registered MCP tools and prompts from the database into the proxy server.
 func (m *MCPService) initMCPProxyServer() error {
+	// Add the search meta-tool first
+	if err := m.initSearchMetaTool(); err != nil {
+		return fmt.Errorf("failed to initialize search meta-tool: %w", err)
+	}
+
 	mcpServerModelsCache := make(map[string]*model.McpServer)
 
 	// Load Tools
