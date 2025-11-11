@@ -2,21 +2,27 @@
 package mcpclient
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
 	"github.com/mcpjungle/mcpjungle/internal"
 	"github.com/mcpjungle/mcpjungle/internal/model"
+	"github.com/mcpjungle/mcpjungle/internal/service/audit"
 	"gorm.io/gorm"
 )
 
 // McpClientService provides methods to manage MCP clients in the database.
 type McpClientService struct {
-	db *gorm.DB
+	db           *gorm.DB
+	auditService *audit.AuditService
 }
 
 func NewMCPClientService(db *gorm.DB) *McpClientService {
-	return &McpClientService{db: db}
+	return &McpClientService{
+		db:           db,
+		auditService: audit.NewAuditService(db),
+	}
 }
 
 // ListClients retrieves all MCP clients known to mcpjungle from the database
@@ -45,6 +51,12 @@ func (m *McpClientService) CreateClient(client model.McpClient) (*model.McpClien
 	if err := m.db.Create(&client).Error; err != nil {
 		return nil, err
 	}
+
+	// Log client creation
+	m.auditService.LogCreate(context.Background(), model.AuditEntityMcpClient, client.Name, client.Name, map[string]interface{}{
+		"description": client.Description,
+	})
+
 	return &client, nil
 }
 
@@ -65,5 +77,14 @@ func (m *McpClientService) GetClientByToken(token string) (*model.McpClient, err
 // It is an idempotent operation. Deleting a client that does not exist will not return an error.
 func (m *McpClientService) DeleteClient(name string) error {
 	result := m.db.Unscoped().Where("name = ?", name).Delete(&model.McpClient{})
-	return result.Error
+	if result.Error != nil {
+		return result.Error
+	}
+
+	// Log client deletion (only if something was actually deleted)
+	if result.RowsAffected > 0 {
+		m.auditService.LogDelete(context.Background(), model.AuditEntityMcpClient, name, name)
+	}
+
+	return nil
 }

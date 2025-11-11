@@ -37,6 +37,12 @@ func (m *MCPService) RegisterMcpServer(ctx context.Context, s *model.McpServer) 
 		log.Printf("[WARN] failed to register prompts for MCP server %s: %v", s.Name, err)
 	}
 
+	// Log successful server registration
+	m.auditService.LogCreate(ctx, model.AuditEntityMcpServer, s.Name, s.Name, map[string]interface{}{
+		"transport":   s.Transport,
+		"description": s.Description,
+	})
+
 	return nil
 }
 
@@ -66,6 +72,9 @@ func (m *MCPService) DeregisterMcpServer(name string) error {
 	if err := m.db.Unscoped().Delete(s).Error; err != nil {
 		return fmt.Errorf("failed to deregister server %s: %w", name, err)
 	}
+
+	// Log server deregistration
+	m.auditService.LogDelete(context.Background(), model.AuditEntityMcpServer, name, name)
 
 	return nil
 }
@@ -103,6 +112,13 @@ func (m *MCPService) EnableMcpServer(name string) ([]string, []string, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to enable prompts for server %s: %w", name, err)
 	}
+
+	// Log enable operation
+	m.auditService.LogEnable(context.Background(), model.AuditEntityMcpServer, name, name, map[string]interface{}{
+		"tools_count":   len(toolsEnabled),
+		"prompts_count": len(promptsEnabled),
+	})
+
 	return toolsEnabled, promptsEnabled, nil
 }
 
@@ -121,5 +137,12 @@ func (m *MCPService) DisableMcpServer(name string) ([]string, []string, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to disable prompts for server %s: %w", name, err)
 	}
+
+	// Log disable operation
+	m.auditService.LogDisable(context.Background(), model.AuditEntityMcpServer, name, name, map[string]interface{}{
+		"tools_count":   len(toolsDisabled),
+		"prompts_count": len(promptsDisabled),
+	})
+
 	return toolsDisabled, promptsDisabled, nil
 }

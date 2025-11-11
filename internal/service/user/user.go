@@ -2,22 +2,28 @@
 package user
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
 	"github.com/mcpjungle/mcpjungle/internal"
 	"github.com/mcpjungle/mcpjungle/internal/model"
+	"github.com/mcpjungle/mcpjungle/internal/service/audit"
 	"github.com/mcpjungle/mcpjungle/pkg/types"
 	"gorm.io/gorm"
 )
 
 // UserService provides methods to manage users in the MCPJungle system.
 type UserService struct {
-	db *gorm.DB
+	db           *gorm.DB
+	auditService *audit.AuditService
 }
 
 func NewUserService(db *gorm.DB) *UserService {
-	return &UserService{db: db}
+	return &UserService{
+		db:           db,
+		auditService: audit.NewAuditService(db),
+	}
 }
 
 // CreateAdminUser creates an admin user in the MCPJungle system.
@@ -34,6 +40,12 @@ func (u *UserService) CreateAdminUser() (*model.User, error) {
 	if err := u.db.Create(&user).Error; err != nil {
 		return nil, fmt.Errorf("failed to create admin user: %w", err)
 	}
+
+	// Log admin user creation
+	u.auditService.LogCreate(context.Background(), model.AuditEntityUser, user.Username, user.Username, map[string]interface{}{
+		"role": user.Role,
+	})
+
 	return &user, nil
 }
 
@@ -65,6 +77,12 @@ func (u *UserService) CreateUser(username string) (*model.User, error) {
 	if err := u.db.Create(&user).Error; err != nil {
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
+
+	// Log user creation
+	u.auditService.LogCreate(context.Background(), model.AuditEntityUser, user.Username, user.Username, map[string]interface{}{
+		"role": user.Role,
+	})
+
 	return &user, nil
 }
 
@@ -97,5 +115,9 @@ func (u *UserService) DeleteUser(username string) error {
 	if err != nil {
 		return fmt.Errorf("failed to delete user: %w", err)
 	}
+
+	// Log user deletion
+	u.auditService.LogDelete(context.Background(), model.AuditEntityUser, username, username)
+
 	return nil
 }
