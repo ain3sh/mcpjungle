@@ -115,6 +115,30 @@ func (s *Server) getToolGroupHandler() gin.HandlerFunc {
 		}
 		resp.ExcludedTools = excludedTools
 
+		// Get included prompts
+		var prompts []string
+		prompts, err = group.GetPrompts()
+		if err != nil {
+			c.JSON(
+				http.StatusInternalServerError,
+				gin.H{"error": fmt.Sprintf("error getting included prompts of group: %s", err.Error())},
+			)
+			return
+		}
+		resp.IncludedPrompts = prompts
+
+		// Get excluded prompts
+		var excludedPrompts []string
+		excludedPrompts, err = group.GetExcludedPrompts()
+		if err != nil {
+			c.JSON(
+				http.StatusInternalServerError,
+				gin.H{"error": fmt.Sprintf("error getting excluded prompts of group: %s", err.Error())},
+			)
+			return
+		}
+		resp.ExcludedPrompts = excludedPrompts
+
 		c.JSON(http.StatusOK, resp)
 	}
 }
