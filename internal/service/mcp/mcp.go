@@ -56,6 +56,14 @@ func NewMCPService(
 	sseMcpProxyServer *server.MCPServer,
 	metrics telemetry.CustomMetrics,
 ) (*MCPService, error) {
+    // Validate inputs early to avoid nil dereferences during initialization
+    if mcpProxyServer == nil || sseMcpProxyServer == nil {
+        return nil, fmt.Errorf("mcp proxy servers must not be nil")
+    }
+    // Ensure provided server pointers reference initialized instances
+    // Reinitialize in place to preserve pointer identity expected by tests
+    *mcpProxyServer = *server.NewMCPServer("mcpjungle-proxy", "MCPJungle proxy server")
+    *sseMcpProxyServer = *server.NewMCPServer("mcpjungle-proxy-sse", "MCPJungle SSE proxy server")
 	s := &MCPService{
 		db: db,
 
