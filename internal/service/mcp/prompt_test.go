@@ -132,6 +132,10 @@ func TestEnableDisablePrompts(t *testing.T) {
 	service := &MCPService{
 		db:             db,
 		mcpProxyServer: mcpProxyServer,
+		
+		// Initialize callbacks to prevent nil pointer dereference
+		promptDeletionCallback: func(promptNames ...string) {},
+		promptAdditionCallback: func(promptName string) error { return nil },
 	}
 
 	srv := createTestServer(t, db)
@@ -175,6 +179,10 @@ func TestEnableDisableServerPrompts(t *testing.T) {
 	service := &MCPService{
 		db:             db,
 		mcpProxyServer: mcpProxyServer,
+		
+		// Initialize callbacks to prevent nil pointer dereference
+		promptDeletionCallback: func(promptNames ...string) {},
+		promptAdditionCallback: func(promptName string) error { return nil },
 	}
 
 	srv := createTestServer(t, db)
