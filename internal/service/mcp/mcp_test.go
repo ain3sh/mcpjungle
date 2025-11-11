@@ -166,13 +166,14 @@ func TestMCPServiceToolInstances(t *testing.T) {
 	mcpService, err := NewMCPService(db, proxyServer, proxyServer, telemetry.NewNoopCustomMetrics())
 	testhelpers.AssertNoError(t, err)
 
-	// Test that toolInstances map is properly initialized
-	if mcpService.toolInstances == nil {
-		t.Error("Expected toolInstances to be initialized")
-	}
-	if len(mcpService.toolInstances) != 0 {
-		t.Errorf("Expected toolInstances to be empty, got %d items", len(mcpService.toolInstances))
-	}
+    // Test that toolInstances map is properly initialized
+    if mcpService.toolInstances == nil {
+        t.Error("Expected toolInstances to be initialized")
+    }
+    // The search meta-tool is registered during initialization, so expect at least 1
+    if len(mcpService.toolInstances) < 1 {
+        t.Errorf("Expected at least 1 tool instance (search meta-tool), got %d", len(mcpService.toolInstances))
+    }
 
 	// Test that we can safely access the map
 	mcpService.mu.RLock()
