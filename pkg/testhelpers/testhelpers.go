@@ -14,7 +14,23 @@ import (
 
 // CreateTestDB creates a test database using SQLite in-memory database
 func CreateTestDB() (*gorm.DB, error) {
-	return gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		return nil, err
+	}
+
+	// CRITICAL: SQLite :memory: databases are per-connection.
+	// With connection pooling, different goroutines might get different connections
+	// which see completely separate databases. This breaks async operations.
+	// Solution: Limit to a single connection for in-memory test databases.
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, err
+	}
+	sqlDB.SetMaxOpenConns(1)
+	sqlDB.SetMaxIdleConns(1)
+
+	return db, nil
 }
 
 // AssertError asserts that an error occurred
