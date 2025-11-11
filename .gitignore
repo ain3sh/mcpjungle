@@ -35,3 +35,7 @@ dist/
 mcpjungle
 mcp.db
 mcpjungle.db
+
+# Personal development files
+CLAUDE_REMINDERS.md
+references/
