@@ -19,6 +19,7 @@ import (
 	"github.com/mcpjungle/mcpjungle/pkg/version"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+	"gorm.io/gorm"
 )
 
 const (
@@ -29,6 +30,9 @@ const (
 type ServerOptions struct {
 	// Port is the HTTP ports to bind the server to
 	Port string
+
+	// DB is the database connection (needed for OAuth)
+	DB *gorm.DB
 
 	// MCPProxyServer is the MCP proxy server instance that contains tools for all MCP servers
 	// using the stdio or streamable http transport.
@@ -54,6 +58,13 @@ type ServerOptions struct {
 type Server struct {
 	port   string
 	router *gin.Engine
+	db     *gorm.DB
+	logger interface {
+		Debugf(format string, args ...interface{})
+		Infof(format string, args ...interface{})
+		Warnf(format string, args ...interface{})
+		Errorf(format string, args ...interface{})
+	}
 
 	mcpProxyServer    *server.MCPServer
 	sseMcpProxyServer *server.MCPServer
@@ -74,10 +85,31 @@ type Server struct {
 	groupSseServers sync.Map
 }
 
+// simpleLogger is a basic logger implementation for the server
+type simpleLogger struct{}
+
+// Implement logger methods
+func (l *simpleLogger) Debugf(format string, args ...interface{}) {
+	fmt.Printf("[DEBUG] "+format+"\n", args...)
+}
+func (l *simpleLogger) Infof(format string, args ...interface{}) {
+	fmt.Printf("[INFO] "+format+"\n", args...)
+}
+func (l *simpleLogger) Warnf(format string, args ...interface{}) {
+	fmt.Printf("[WARN] "+format+"\n", args...)
+}
+func (l *simpleLogger) Errorf(format string, args ...interface{}) {
+	fmt.Printf("[ERROR] "+format+"\n", args...)
+}
+
 // NewServer initializes a new Gin server for MCPJungle registry and MCP proxy
 func NewServer(opts *ServerOptions) (*Server, error) {
+	logger := &simpleLogger{}
+
 	s := &Server{
 		port:              opts.Port,
+		db:                opts.DB,
+		logger:            logger,
 		mcpProxyServer:    opts.MCPProxyServer,
 		sseMcpProxyServer: opts.SseMcpProxyServer,
 		mcpService:        opts.MCPService,
@@ -298,6 +330,21 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 		adminAPI.DELETE("/tool-groups/:name", s.deleteToolGroupHandler())
 		adminAPI.PUT("/tool-groups/:name", s.updateToolGroupHandler())
 	}
+
+	// OAuth 2.1 and OIDC endpoints (no authentication required for discovery and token exchange)
+	// OAuth Discovery endpoints
+	r.GET("/.well-known/oauth-authorization-server", s.OAuthDiscoveryHandler)
+	r.GET("/.well-known/openid-configuration", s.OIDCConfigurationHandler)
+	r.GET("/.well-known/oauth-protected-resource", s.ResourceMetadataHandler)
+
+	// OAuth Authorization and Token endpoints
+	r.GET("/oauth/authorize", s.requireInitialized(), s.verifyUserAuthForAPIAccess(), s.OAuthAuthorizeHandler)
+	r.POST("/oauth/token", s.requireInitialized(), s.OAuthTokenHandler)
+	r.POST("/oauth/revoke", s.requireInitialized(), s.OAuthRevokeHandler)
+	r.POST("/oauth/introspect", s.requireInitialized(), s.OAuthIntrospectHandler)
+
+	// Dynamic client registration (admin only in enterprise mode)
+	r.POST("/oauth/register", s.requireInitialized(), s.verifyUserAuthForAPIAccess(), s.requireAdminUser(), s.OAuthRegisterHandler)
 
 	return r, nil
 }
