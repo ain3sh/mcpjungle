@@ -39,3 +39,5 @@ mcpjungle.db
 # Personal development files
 CLAUDE_REMINDERS.md
 references/
+server.log
+*.db*
