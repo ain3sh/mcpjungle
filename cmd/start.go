@@ -342,6 +342,7 @@ func runStartServer(cmd *cobra.Command, args []string) error {
 	// create the API server
 	opts := &api.ServerOptions{
 		Port:              bindPort,
+		DB:                dbConn,
 		MCPProxyServer:    mcpProxyServer,
 		SseMcpProxyServer: sseMcpProxyServer,
 		MCPService:        mcpService,

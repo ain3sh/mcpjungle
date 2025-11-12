@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/mcpjungle/mcpjungle/internal/model"
+	"github.com/mcpjungle/mcpjungle/internal/service/oauth"
 	"github.com/mcpjungle/mcpjungle/internal/util"
 	"github.com/mcpjungle/mcpjungle/pkg/types"
 )
@@ -28,6 +29,7 @@ func (s *Server) requireInitialized() gin.HandlerFunc {
 
 // verifyUserAuthForAPIAccess is middleware that checks for a valid user token if the server is in enterprise mode.
 // this middleware doesn't care about the role of the user, it just verifies that they're authenticated.
+// Supports both traditional bearer tokens and OAuth access tokens.
 func (s *Server) verifyUserAuthForAPIAccess() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		mode, exists := c.Get("mode")
@@ -53,7 +55,44 @@ func (s *Server) verifyUserAuthForAPIAccess() gin.HandlerFunc {
 			return
 		}
 
-		// Verify that the token is valid and corresponds to a user
+		// Try OAuth token first, then fall back to traditional user token
+		oauthService := oauth.NewOAuthService(s.db)
+		oauthToken, err := oauthService.ValidateAccessToken(token)
+		if err == nil && oauthToken != nil {
+			// Valid OAuth token
+			if oauthToken.UserID == nil {
+				// Client credentials grant (no user)
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "user access required"})
+				return
+			}
+
+			// Get user from OAuth token
+			var authenticatedUser model.User
+			if err := s.db.First(&authenticatedUser, *oauthToken.UserID).Error; err != nil {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
+				return
+			}
+
+			// Store user and OAuth token in context
+			c.Set("user", &authenticatedUser)
+			c.Set("user_id", authenticatedUser.ID)
+			c.Set("oauth_token", oauthToken)
+
+			// Set audit context
+			auditCtx := &util.AuditContext{
+				ActorType: model.AuditActorUser,
+				ActorID:   authenticatedUser.Username,
+				IPAddress: c.ClientIP(),
+				UserAgent: c.GetHeader("User-Agent"),
+			}
+			ctx := util.SetAuditContext(c.Request.Context(), auditCtx)
+			c.Request = c.Request.WithContext(ctx)
+
+			c.Next()
+			return
+		}
+
+		// Fall back to traditional user token
 		authenticatedUser, err := s.userService.GetUserByAccessToken(token)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid access token: " + err.Error()})
@@ -62,6 +101,7 @@ func (s *Server) verifyUserAuthForAPIAccess() gin.HandlerFunc {
 
 		// Store user in context for potential role checks in subsequent handlers
 		c.Set("user", authenticatedUser)
+		c.Set("user_id", authenticatedUser.ID)
 
 		// Set audit context for tracking operations
 		auditCtx := &util.AuditContext{
@@ -151,6 +191,7 @@ func (s *Server) requireServerMode(m model.ServerMode) gin.HandlerFunc {
 // checkAuthForMcpProxyAccess is middleware for MCP proxy that checks for a valid MCP client token
 // if the server is in enterprise mode.
 // In development mode, mcp clients do not require auth to access the MCP proxy.
+// Supports both traditional bearer tokens and OAuth access tokens.
 func (s *Server) checkAuthForMcpProxyAccess() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		mode, exists := c.Get("mode")
@@ -181,6 +222,54 @@ func (s *Server) checkAuthForMcpProxyAccess() gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing MCP client access token"})
 			return
 		}
+
+		// Try OAuth token first
+		oauthService := oauth.NewOAuthService(s.db)
+		oauthToken, err := oauthService.ValidateAccessToken(token)
+		if err == nil && oauthToken != nil {
+			// Valid OAuth token - get the OAuth client
+			oauthClient, err := oauthService.GetClient(oauthToken.ClientID)
+			if err != nil || oauthClient == nil {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "OAuth client not found"})
+				return
+			}
+
+			// Create a pseudo MCP client for context compatibility
+			// Map OAuth scopes to server access
+			var scopes []string
+			if oauthToken.Scope != "" {
+				scopes = strings.Split(oauthToken.Scope, " ")
+			}
+
+			pseudoClient := &model.McpClient{
+				Name:        oauthClient.ClientName,
+				Description: "OAuth client: " + oauthClient.ClientID,
+				AccessToken: token,
+			}
+
+			// Inject the OAuth-authenticated client in context
+			ctx = context.WithValue(ctx, "client", pseudoClient)
+			ctx = context.WithValue(ctx, "oauth_scopes", scopes)
+			ctx = context.WithValue(ctx, "oauth_token", oauthToken)
+
+			// Inject tool group service for tool-level ACL checking
+			ctx = context.WithValue(ctx, "toolGroupChecker", s.toolGroupService)
+
+			// Set audit context for tracking operations by OAuth clients
+			auditCtx := &util.AuditContext{
+				ActorType: model.AuditActorMcpClient,
+				ActorID:   oauthClient.ClientName,
+				IPAddress: c.ClientIP(),
+				UserAgent: c.GetHeader("User-Agent"),
+			}
+			ctx = util.SetAuditContext(ctx, auditCtx)
+			c.Request = c.Request.WithContext(ctx)
+
+			c.Next()
+			return
+		}
+
+		// Fall back to traditional MCP client token
 		client, err := s.mcpClientService.GetClientByToken(token)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid MCP client token"})
@@ -188,7 +277,7 @@ func (s *Server) checkAuthForMcpProxyAccess() gin.HandlerFunc {
 		}
 
 		// inject the authenticated MCP client in context for the proxy to use
-		ctx = context.WithValue(c.Request.Context(), "client", client)
+		ctx = context.WithValue(ctx, "client", client)
 
 		// Inject tool group service for tool-level ACL checking
 		// The tool group service implements both ToolGroupToolChecker and ToolGroupResolver interfaces
