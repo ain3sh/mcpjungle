@@ -19,7 +19,9 @@ import (
 	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mcpjungle/mcpjungle/internal/model"
+	"github.com/mcpjungle/mcpjungle/internal/service/oauth"
 	"github.com/mcpjungle/mcpjungle/pkg/types"
+	"gorm.io/gorm"
 )
 
 // serverInitRequestTimeout is the timeout (in seconds) for the initialization request to the MCP server
@@ -145,15 +147,30 @@ func convertPromptModelToMcpObject(p *model.Prompt) (mcp.Prompt, error) {
 }
 
 // createHTTPMcpServerConn creates a new connection with a streamable http MCP server and returns the client.
-func createHTTPMcpServerConn(ctx context.Context, s *model.McpServer) (*client.Client, error) {
+func createHTTPMcpServerConn(ctx context.Context, db *gorm.DB, s *model.McpServer) (*client.Client, error) {
 	conf, err := s.GetStreamableHTTPConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get streamable HTTP config for MCP server %s: %w", s.Name, err)
 	}
 
 	var opts []transport.StreamableHTTPCOption
-	if conf.BearerToken != "" {
-		// If bearer token is provided, set the Authorization header
+
+	// Check if OAuth is enabled for this server
+	if conf.OAuth != nil && conf.OAuth.Enabled {
+		// Use OAuth client service to get/refresh access token
+		oauthClientService := oauth.NewOAuthClientService(db)
+		accessToken, err := oauthClientService.GetOrRefreshUpstreamToken(ctx, s.Name)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get OAuth access token for MCP server %s: %w", s.Name, err)
+		}
+
+		// Set OAuth bearer token in Authorization header
+		o := transport.WithHTTPHeaders(map[string]string{
+			"Authorization": "Bearer " + accessToken,
+		})
+		opts = append(opts, o)
+	} else if conf.BearerToken != "" {
+		// Fall back to static bearer token if OAuth is not enabled
 		o := transport.WithHTTPHeaders(map[string]string{
 			"Authorization": "Bearer " + conf.BearerToken,
 		})
@@ -271,15 +288,30 @@ func runStdioServer(ctx context.Context, s *model.McpServer) (*client.Client, er
 }
 
 // createSSEMcpServerConn creates a new connection with an SSE transport-based MCP server and returns the client.
-func createSSEMcpServerConn(ctx context.Context, s *model.McpServer) (*client.Client, error) {
+func createSSEMcpServerConn(ctx context.Context, db *gorm.DB, s *model.McpServer) (*client.Client, error) {
 	conf, err := s.GetSSEConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get SSE transport config for MCP server %s: %w", s.Name, err)
 	}
 
 	var opts []transport.ClientOption
-	if conf.BearerToken != "" {
-		// If bearer token is provided, set the Authorization header
+
+	// Check if OAuth is enabled for this server
+	if conf.OAuth != nil && conf.OAuth.Enabled {
+		// Use OAuth client service to get/refresh access token
+		oauthClientService := oauth.NewOAuthClientService(db)
+		accessToken, err := oauthClientService.GetOrRefreshUpstreamToken(ctx, s.Name)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get OAuth access token for MCP server %s: %w", s.Name, err)
+		}
+
+		// Set OAuth bearer token in Authorization header
+		o := transport.WithHeaders(map[string]string{
+			"Authorization": "Bearer " + accessToken,
+		})
+		opts = append(opts, o)
+	} else if conf.BearerToken != "" {
+		// Fall back to static bearer token if OAuth is not enabled
 		o := transport.WithHeaders(map[string]string{
 			"Authorization": "Bearer " + conf.BearerToken,
 		})
@@ -310,9 +342,9 @@ func createSSEMcpServerConn(ctx context.Context, s *model.McpServer) (*client.Cl
 	return c, nil
 }
 
-func newMcpServerSession(ctx context.Context, s *model.McpServer) (*client.Client, error) {
+func newMcpServerSession(ctx context.Context, db *gorm.DB, s *model.McpServer) (*client.Client, error) {
 	if s.Transport == types.TransportStreamableHTTP {
-		mcpClient, err := createHTTPMcpServerConn(ctx, s)
+		mcpClient, err := createHTTPMcpServerConn(ctx, db, s)
 		if err != nil {
 			return nil, fmt.Errorf(
 				"failed to create connection to streamable http MCP server %s: %w", s.Name, err,
@@ -322,7 +354,7 @@ func newMcpServerSession(ctx context.Context, s *model.McpServer) (*client.Clien
 	}
 
 	if s.Transport == types.TransportSSE {
-		mcpClient, err := createSSEMcpServerConn(ctx, s)
+		mcpClient, err := createSSEMcpServerConn(ctx, db, s)
 		if err != nil {
 			return nil, fmt.Errorf(
 				"failed to create connection to SSE MCP server %s: %w", s.Name, err,

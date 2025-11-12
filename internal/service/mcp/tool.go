@@ -131,7 +131,7 @@ func (m *MCPService) InvokeTool(ctx context.Context, name string, args map[strin
 		)
 	}
 
-	mcpClient, err := newMcpServerSession(ctx, serverModel)
+	mcpClient, err := newMcpServerSession(ctx, m.db, serverModel)
 	if err != nil {
 		return nil, err
 	}

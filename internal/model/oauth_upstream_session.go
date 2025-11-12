@@ -47,6 +47,10 @@ type OAuthUpstreamSession struct {
 	// TokenEndpoint is the upstream server's token URL
 	TokenEndpoint string `json:"token_endpoint"`
 
+	// ResourceURI is the canonical URI of the MCP server (RFC 8707 resource indicator)
+	// This is the value used in the "resource" parameter for token requests
+	ResourceURI string `json:"resource_uri"`
+
 	// CodeVerifier is the PKCE code verifier for the current auth flow
 	// Temporarily stored during authorization, cleared after token exchange
 	CodeVerifier string `json:"-"`

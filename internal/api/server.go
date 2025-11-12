@@ -329,6 +329,12 @@ func (s *Server) setupRouter() (*gin.Engine, error) {
 		adminAPI.GET("/tool-groups", s.listToolGroupsHandler())
 		adminAPI.DELETE("/tool-groups/:name", s.deleteToolGroupHandler())
 		adminAPI.PUT("/tool-groups/:name", s.updateToolGroupHandler())
+
+		// OAuth client endpoints for connecting to upstream OAuth-enabled MCP servers
+		adminAPI.POST("/oauth/upstream/initiate", s.OAuthClientInitiateHandler)
+		adminAPI.GET("/oauth/upstream/callback", s.OAuthClientCallbackHandler)
+		adminAPI.GET("/oauth/upstream/status/:server_name", s.OAuthClientStatusHandler)
+		adminAPI.DELETE("/oauth/upstream/:server_name", s.OAuthClientRevokeHandler)
 	}
 
 	// OAuth 2.1 and OIDC endpoints (no authentication required for discovery and token exchange)

@@ -17,6 +17,27 @@ type StreamableHTTPConfig struct {
 	// BearerToken is an optional token used for authenticating requests to the MCP server.
 	// If present, it will be used to set the Authorization header in all requests to this MCP server.
 	BearerToken string `json:"bearer_token,omitempty"`
+
+	// OAuth configuration for connecting to OAuth-enabled MCP servers
+	OAuth *OAuthConfig `json:"oauth,omitempty"`
+}
+
+// OAuthConfig contains OAuth 2.1 configuration for upstream MCP servers
+type OAuthConfig struct {
+	// Enabled indicates if OAuth should be used for this server
+	Enabled bool `json:"enabled"`
+
+	// ServerURL is the base URL of the MCP server (used for discovery)
+	ServerURL string `json:"server_url,omitempty"`
+
+	// ClientName is the name to use when registering as OAuth client
+	ClientName string `json:"client_name,omitempty"`
+
+	// RedirectURI is the callback URL for OAuth authorization
+	RedirectURI string `json:"redirect_uri,omitempty"`
+
+	// Scopes are the OAuth scopes to request
+	Scopes []string `json:"scopes,omitempty"`
 }
 
 type StdioConfig struct {
@@ -35,6 +56,9 @@ type SSEConfig struct {
 	URL string `json:"url"`
 
 	BearerToken string `json:"bearer_token,omitempty"`
+
+	// OAuth configuration for connecting to OAuth-enabled MCP servers
+	OAuth *OAuthConfig `json:"oauth,omitempty"`
 }
 
 // McpServer represents a MCP server registered in mcpjungle
